@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+
+    environment {
+        SONARQUBE = 'LocalSonarQube'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/your-repo-url.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh 'npm test'
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+            steps {
+                sh '''
+                    curl -L -o dc.zip https://github.com/jeremylong/DependencyCheck/releases/latest/download/dependency-check.zip
+                    unzip -q dc.zip -d dc
+                    ./dc/bin/dependency-check.sh --project "NodeApp" --scan . --format "HTML" --out reports
+                '''
+                archiveArtifacts artifacts: 'reports/*'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv("${SONARQUBE}") {
+                    sh '''
+                        sonar-scanner \
+                          -Dsonar.projectKey=nodeapp \
+                          -Dsonar.sources=. \
+                          -Dsonar.exclusions=node_modules/** \
+                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                    '''
+                }
+            }
+        }
+    }
+}

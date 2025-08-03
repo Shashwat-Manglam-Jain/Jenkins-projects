@@ -1,0 +1,6 @@
+workflow-aggregator
+git
+docker-workflow
+blueocean
+sonar
+dependency-check-jenkins-plugin

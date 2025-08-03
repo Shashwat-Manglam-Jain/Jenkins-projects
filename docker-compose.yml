@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  jenkins-master:
+    build: ./jenkins
+    container_name: jenkins-master
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jenkins-net
+
+  agent1:
+    build: ./agent
+    container_name: jenkins-agent-1
+    depends_on:
+      - jenkins-master
+    environment:
+      - JENKINS_AGENT_NAME=agent1
+    networks:
+      - jenkins-net
+
+  agent2:
+    build: ./agent
+    container_name: jenkins-agent-2
+    depends_on:
+      - jenkins-master
+    environment:
+      - JENKINS_AGENT_NAME=agent2
+    networks:
+      - jenkins-net
+
+  agent3:
+    build: ./agent
+    container_name: jenkins-agent-3
+    depends_on:
+      - jenkins-master
+    environment:
+      - JENKINS_AGENT_NAME=agent3
+    networks:
+      - jenkins-net
+
+  sonarqube:
+    image: sonarqube:lts
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      - SONARQUBE_JDBC_URL=jdbc:postgresql://db:5432/sonar
+      - SONARQUBE_JDBC_USERNAME=sonar
+      - SONARQUBE_JDBC_PASSWORD=sonar
+    networks:
+      - jenkins-net
+
+  db:
+    image: postgres:13
+    container_name: sonardb
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+    volumes:
+      - sonar_db:/var/lib/postgresql/data
+    networks:
+      - jenkins-net
+
+volumes:
+  jenkins_home:
+  sonar_db:
+
+networks:
+  jenkins-net:
