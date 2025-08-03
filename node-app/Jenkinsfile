@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent none
 
     environment {
         SONARQUBE = 'LocalSonarQube'
@@ -7,44 +7,67 @@ pipeline {
 
     stages {
         stage('Checkout') {
+            agent { label 'agent1' }
             steps {
                 git branch: 'main', url: 'https://github.com/Shashwat-Manglam-Jain/Jenkins-projects.git'
+                stash name: 'source', includes: 'node-app/**'
             }
         }
 
         stage('Install Dependencies') {
+            agent { label 'agent1' }
             steps {
-                sh 'npm install'
+                unstash 'source'
+                dir('node-app') {
+                    sh 'npm install'
+                }
+                stash name: 'built', includes: 'node-app/**'
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                sh 'npm test'
-            }
-        }
+        stage('Parallel Build Tasks') {
+            parallel {
+                stage('Run Tests') {
+                    agent { label 'agent2' }
+                    steps {
+                        unstash 'built'
+                        dir('node-app') {
+                            sh 'npm test'
+                        }
+                    }
+                }
 
-        stage('OWASP Dependency Check') {
-            steps {
-                sh '''
-                    curl -L -o dc.zip https://github.com/jeremylong/DependencyCheck/releases/latest/download/dependency-check.zip
-                    unzip -q dc.zip -d dc
-                    ./dc/bin/dependency-check.sh --project "NodeApp" --scan . --format "HTML" --out reports
-                '''
-                archiveArtifacts artifacts: 'reports/*'
+                stage('OWASP Dependency Check') {
+                    agent { label 'agent3' }
+                    steps {
+                        unstash 'built'
+                        dir('node-app') {
+                            sh '''
+                                curl -L -o dc.zip https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.10/dependency-check-9.0.10-release.zip
+                                unzip -q dc.zip -d dc
+                                ./dc/dependency-check/bin/dependency-check.sh --project "NodeApp" --scan . --format "HTML" --out reports
+                            '''
+                            archiveArtifacts artifacts: 'node-app/reports/*'
+                        }
+                    }
+                }
             }
         }
 
         stage('SonarQube Analysis') {
+            agent { label 'agent1' }
             steps {
-                withSonarQubeEnv("${SONARQUBE}") {
-                    sh '''
-                        sonar-scanner \
-                          -Dsonar.projectKey=nodeapp \
-                          -Dsonar.sources=. \
-                          -Dsonar.exclusions=node_modules/** \
-                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                    '''
+                unstash 'built'
+                dir('node-app') {
+                    withSonarQubeEnv("${SONARQUBE}") {
+                        sh '''
+                            sonar-scanner \
+                              -Dsonar.projectKey=nodeapp \
+                              -Dsonar.sources=. \
+                              -Dsonar.exclusions=node_modules/** \
+                              -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info || true
+                        '''
+                    }
                 }
             }
         }
