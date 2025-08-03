@@ -3,6 +3,12 @@ pipeline {
 
     environment {
         SONARQUBE = 'LocalSonarQube'
+        RECIPIENTS = 'shashwatjain177@gmail.com'
+        NVD_API_KEY = credentials('NVD_API_KEY')
+    }
+
+    options {
+        skipDefaultCheckout(true)
     }
 
     stages {
@@ -44,10 +50,15 @@ pipeline {
                         dir('node-app') {
                             sh '''
                                 curl -L -o dc.zip https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.10/dependency-check-9.0.10-release.zip
-                                unzip -q dc.zip -d dc
-                                ./dc/dependency-check/bin/dependency-check.sh --project "NodeApp" --scan . --format "HTML" --out reports
+                                unzip -oq dc.zip -d dc
+                                ./dc/dependency-check/bin/dependency-check.sh \
+                                  --nvdApiKey ${NVD_API_KEY} \
+                                  --project "NodeApp" \
+                                  --scan . \
+                                  --format "HTML" \
+                                  --out reports
                             '''
-                            archiveArtifacts artifacts: 'node-app/reports/*'
+                            archiveArtifacts artifacts: 'node-app/reports/*', allowEmptyArchive: true
                         }
                     }
                 }
@@ -70,6 +81,32 @@ pipeline {
                     }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            emailext(
+                subject: "✅ Jenkins Build SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    <p>Good news! The Jenkins build <b>${env.JOB_NAME} #${env.BUILD_NUMBER}</b> completed successfully.</p>
+                    <p>Check the console output at <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                """,
+                to: "${RECIPIENTS}",
+                mimeType: 'text/html'
+            )
+        }
+
+        failure {
+            emailext(
+                subject: "❌ Jenkins Build FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    <p>The Jenkins build <b>${env.JOB_NAME} #${env.BUILD_NUMBER}</b> has <span style="color:red;">FAILED</span>.</p>
+                    <p>Check the logs at <a href="${env.BUILD_URL}">${env.BUILD_URL}</a> for details.</p>
+                """,
+                to: "${RECIPIENTS}",
+                mimeType: 'text/html'
+            )
         }
     }
 }
